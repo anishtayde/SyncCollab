@@ -30,6 +30,14 @@ export class SocketProvider {
     };
 
     this.ws.onmessage = (event) => {
+        if (typeof event.data === "string") {
+            try {
+            this.onJson?.(JSON.parse(event.data));
+            } catch {
+            /* ignore bad JSON */
+            }
+            return;
+      }
       const decoder = decoding.createDecoder(new Uint8Array(event.data));
       const type = decoding.readVarUint(decoder);
 

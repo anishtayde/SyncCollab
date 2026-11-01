@@ -6,6 +6,8 @@ import { pool } from "../db";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { embedText, toVectorLiteral } from "../embeddings";
 import { parseDiff } from "../diff";
+import { streamGemini } from "../gemini";
+import { buildReviewPrompt, REVIEW_SYSTEM_PROMPT, type SimilarSnippet } from "../review";
 
 const router = Router();
 const CACHE_ENABLED = process.env.CACHE_ENABLED !== "false";
@@ -268,5 +270,76 @@ router.post("/:id/review/parse", (req: AuthRequest, res) => {
     deletions: files.reduce((n, f) => n + f.deletions, 0),
   };
   res.json({ files, summary });
+});
+
+router.post("/:id/review", async (req: AuthRequest, res) => {
+  const idCheck = z.string().uuid().safeParse(req.params.id);
+  const parsed = parseDiffSchema.safeParse(req.body);
+  if (!idCheck.success || !parsed.success) {
+    res.status(400).json({ error: "Diff text required (max 200000 characters)" });
+    return;
+  }
+  const files = parseDiff(parsed.data.diff);
+  if (files.length === 0) {
+    res.status(422).json({ error: "No changes found. Paste the output of `git diff`." });
+    return;
+  }
+
+  // From here on we stream, so errors must be sent as events (the status code is already 200)
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders();
+
+  const send = (payload: unknown) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
+
+  // stop the Gemini call if the browser disconnects
+  const controller = new AbortController();
+  res.on("close", () => controller.abort());
+
+  try {
+    // 1) retrieval: find similar snippets in this room (optional, never blocks the review)
+    send({ type: "status", message: "Searching similar snippets..." });
+    let similar: SimilarSnippet[] = [];
+    try {
+      const changed = files
+        .flatMap((f) => f.hunks.flatMap((h) => h.lines))
+        .filter((l) => l.type === "add")
+        .map((l) => l.content)
+        .join("\n")
+        .slice(0, 2000);
+      if (changed.trim()) {
+        const vector = await embedText(changed, "RETRIEVAL_QUERY");
+        const found = await pool.query(
+          `SELECT title, language, code FROM snippets
+           WHERE room_id = $1
+           ORDER BY embedding <=> $2::vector
+           LIMIT 3`,
+          [idCheck.data, toVectorLiteral(vector)]
+        );
+        similar = found.rows;
+      }
+    } catch (err) {
+      console.error("similar snippet lookup failed:", err);
+    }
+
+    // 2) generation: stream the review
+    send({ type: "status", message: "Reviewing..." });
+    const prompt = buildReviewPrompt(files, similar);
+    for await (const text of streamGemini(REVIEW_SYSTEM_PROMPT, prompt, controller.signal)) {
+      send({ type: "token", text });
+    }
+    send({ type: "done" });
+  } catch (err) {
+    if (!controller.signal.aborted) {
+      console.error(err);
+      send({ type: "error", message: "Review failed, try again" });
+    }
+  } finally {
+    res.end();
+  }
 });
 export default router;
