@@ -10,12 +10,19 @@ const MESSAGE_AWARENESS = 1;
 export class SocketProvider {
   private ws: WebSocket;
 
-    constructor(
+  private doc: Y.Doc;
+  private awareness: awarenessProtocol.Awareness;
+  private onJson?: (data: any) => void;
+
+  constructor(
     url: string,
-    private doc: Y.Doc,
-    private awareness: awarenessProtocol.Awareness,
-    private onJson?: (data: any) => void
+    doc: Y.Doc,
+    awareness: awarenessProtocol.Awareness,
+    onJson?: (data: any) => void
   ) {
+    this.doc = doc;
+    this.awareness = awareness;
+    this.onJson = onJson;
     this.ws = new WebSocket(url);
     this.ws.binaryType = "arraybuffer";
 
