@@ -7,11 +7,17 @@ import { pool } from "./db";
 import authRouter from "./routes/auth";
 import roomsRouter from "./routes/rooms";
 import { redis } from "./redis";
+import helmet from "helmet";
+import { globalLimiter, authLimiter } from "./rateLimits";
+import { notFound, errorHandler } from "./errors";
 
 dotenv.config();
 
 const app = express();
-app.use(cors());
+app.use(helmet());
+app.use(cors({ origin: (process.env.CLIENT_ORIGIN ?? "http://localhost:5173").split(",") }));
+app.use(globalLimiter);
+app.use("/auth", authLimiter);
 app.use(express.json({ limit: "1mb" }));
 app.use("/auth", authRouter);
 app.use("/rooms", roomsRouter);
@@ -29,6 +35,10 @@ app.get("/health/db", async (_req, res) => {
     res.status(500).json({ status: "error" });
   }
 });
+
+app.use(notFound);
+app.use(errorHandler);
+
 async function clearPresence() {
   const keys = await redis.keys("presence:*");
   if (keys.length > 0) await redis.del(...keys);

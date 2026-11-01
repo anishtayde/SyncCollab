@@ -8,6 +8,7 @@ import { embedText, toVectorLiteral } from "../embeddings";
 import { parseDiff } from "../diff";
 import { streamGemini } from "../gemini";
 import { buildReviewPrompt, REVIEW_SYSTEM_PROMPT, type SimilarSnippet } from "../review";
+import { embedLimiter, reviewLimiter } from "../rateLimits";
 
 const router = Router();
 const CACHE_ENABLED = process.env.CACHE_ENABLED !== "false";
@@ -166,7 +167,7 @@ const snippetSchema = z.object({
   code: z.string().min(1).max(20000),
 });
 
-router.post("/:id/snippets", async (req: AuthRequest, res) => {
+router.post("/:id/snippets", embedLimiter, async (req: AuthRequest, res) => {
   const idCheck = z.string().uuid().safeParse(req.params.id);
   const parsed = snippetSchema.safeParse(req.body);
   if (!idCheck.success || !parsed.success) {
@@ -209,7 +210,7 @@ const searchSchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(5),
 });
 
-router.get("/:id/snippets/search", async (req: AuthRequest, res) => {
+router.get("/:id/snippets/search", embedLimiter, async (req: AuthRequest, res) => {
   const idCheck = z.string().uuid().safeParse(req.params.id);
   const parsed = searchSchema.safeParse(req.query);
   if (!idCheck.success || !parsed.success) {
@@ -272,7 +273,7 @@ router.post("/:id/review/parse", (req: AuthRequest, res) => {
   res.json({ files, summary });
 });
 
-router.post("/:id/review", async (req: AuthRequest, res) => {
+router.post("/:id/review", reviewLimiter, async (req: AuthRequest, res) => {
   const idCheck = z.string().uuid().safeParse(req.params.id);
   const parsed = parseDiffSchema.safeParse(req.body);
   if (!idCheck.success || !parsed.success) {
