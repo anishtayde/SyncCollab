@@ -219,6 +219,14 @@ export default function Room() {
     editor.focus();
   }
   
+    // used by the AI review: turn a finding into an inline comment
+  async function commentOnLine(line: number, body: string) {
+    const data = await api(`/rooms/${id}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ line, body }),
+    });
+    addComment(data.comment);
+  }
   
   function jumpToLine(line: number) {
     editorRef.current?.revealLineInCenter(line);
@@ -249,7 +257,7 @@ export default function Room() {
           <p style={{ margin: "0 0 8px" }}>
             Online: {online.length === 0 ? "-" : online.join(", ")}
           </p>
-          <DiffReview roomId={id!} />
+          <DiffReview roomId={id!} onAddComment={commentOnLine} />
           <div style={{ display: "flex", gap: 12 }}>
             <div style={{ flex: 1 }}>
               <Editor
