@@ -8,6 +8,7 @@ import { api, clearToken, getToken } from "../api";
 import { SocketProvider } from "../SocketProvider";
 import { COLORS, watchCursorStyles } from "../cursors";
 import DiffReview from "../DiffReview";
+import { WS_URL } from "../config";
 
 interface RoomData {
   id: string;
@@ -21,6 +22,7 @@ interface CommentItem {
   author: string;
   created_at: string;
 }
+
 interface SnippetResult {
   id: string;
   title: string;
@@ -37,13 +39,13 @@ export default function Room() {
   const { id } = useParams();
   const [room, setRoom] = useState<RoomData | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [language, setLanguage] = useState("typescript");
   const [online, setOnline] = useState<string[]>([]);
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [commentText, setCommentText] = useState("");
   const [cursorLine, setCursorLine] = useState(1);
   const [editorReady, setEditorReady] = useState(false);
-  const [notice, setNotice] = useState("");
   const [searchText, setSearchText] = useState("");
   const [results, setResults] = useState<SnippetResult[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -128,7 +130,7 @@ export default function Room() {
 
     const stopStyles = watchCursorStyles(awareness);
     const provider = new SocketProvider(
-      `ws://localhost:4000/ws?room=${id}&token=${getToken()}`,
+      `${WS_URL}/ws?room=${id}&token=${getToken()}`,
       doc,
       awareness,
       (msg) => {
@@ -165,8 +167,17 @@ export default function Room() {
       setError((err as Error).message);
     }
   }
-  
-    async function saveSnippet() {
+
+  // used by the AI review: turn a finding into an inline comment
+  async function commentOnLine(line: number, body: string) {
+    const data = await api(`/rooms/${id}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ line, body }),
+    });
+    addComment(data.comment);
+  }
+
+  async function saveSnippet() {
     const code = editorRef.current?.getValue() ?? "";
     if (!code.trim()) {
       setNotice("Write some code first");
@@ -185,7 +196,8 @@ export default function Room() {
       setNotice((err as Error).message);
     }
   }
-    async function runSearch(e: React.FormEvent) {
+
+  async function runSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!searchText.trim()) return;
     setSearching(true);
@@ -218,16 +230,7 @@ export default function Room() {
     ]);
     editor.focus();
   }
-  
-    // used by the AI review: turn a finding into an inline comment
-  async function commentOnLine(line: number, body: string) {
-    const data = await api(`/rooms/${id}/comments`, {
-      method: "POST",
-      body: JSON.stringify({ line, body }),
-    });
-    addComment(data.comment);
-  }
-  
+
   function jumpToLine(line: number) {
     editorRef.current?.revealLineInCenter(line);
     editorRef.current?.setPosition({ lineNumber: line, column: 1 });
@@ -235,15 +238,32 @@ export default function Room() {
   }
 
   return (
-    <div style={{ maxWidth: 1200, margin: "30px auto", fontFamily: "sans-serif" }}>
-      <Link to="/">← Back to rooms</Link>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+    <div className="container">
+      <Link to="/" className="back-link">
+        ← Back to rooms
+      </Link>
+      {error && <p className="error-text">{error}</p>}
       {room && (
         <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2>{room.name}</h2>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              {notice && <small>{notice}</small>}
+          <div className="room-header">
+            <div>
+              <h2>{room.name}</h2>
+              <div className="chips">
+                <span className="muted">Online</span>
+                {online.length === 0 ? (
+                  <span className="muted">–</span>
+                ) : (
+                  online.map((name, i) => (
+                    <span key={`${name}-${i}`} className="chip">
+                      <span className="dot" />
+                      {name}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="toolbar">
+              {notice && <span className="notice">{notice}</span>}
               <button onClick={saveSnippet}>Save as snippet</button>
               <select value={language} onChange={(e) => setLanguage(e.target.value)}>
                 {LANGUAGES.map((l) => (
@@ -254,108 +274,92 @@ export default function Room() {
               </select>
             </div>
           </div>
-          <p style={{ margin: "0 0 8px" }}>
-            Online: {online.length === 0 ? "-" : online.join(", ")}
-          </p>
-          <DiffReview roomId={id!} onAddComment={commentOnLine} />
-          <div style={{ display: "flex", gap: 12 }}>
-            <div style={{ flex: 1 }}>
+
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <DiffReview roomId={id!} onAddComment={commentOnLine} />
+          </div>
+
+          <div className="workspace">
+            <div className="editor-wrap">
               <Editor
-                height="65vh"
+                height="70vh"
                 theme="vs-dark"
                 language={language}
                 defaultValue=""
                 onMount={handleMount}
-                options={{ fontSize: 14, minimap: { enabled: false }, glyphMargin: true }}
+                options={{
+                  fontSize: 14,
+                  minimap: { enabled: false },
+                  glyphMargin: true,
+                  padding: { top: 12 },
+                  scrollBeyondLastLine: false,
+                }}
               />
             </div>
-            <div style={{ width: 300, display: "flex", flexDirection: "column" }}>
-                            <h3 style={{ margin: "0 0 8px" }}>Search snippets</h3>
-              <form onSubmit={runSearch} style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                <input
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  placeholder="e.g. check user credentials"
-                  maxLength={300}
-                  style={{ flex: 1, padding: 6 }}
-                />
-                <button type="submit" disabled={searching}>
-                  {searching ? "..." : "Search"}
-                </button>
-              </form>
-              {results && (
-                <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 12 }}>
-                  {results.length === 0 && <p>No snippets saved in this room yet.</p>}
-                  {results.map((r) => (
-                    <div
-                      key={r.id}
-                      style={{
-                        border: "1px solid #ddd",
-                        borderRadius: 6,
-                        padding: 8,
-                        marginBottom: 8,
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <strong>{r.title}</strong>
-                        <small>{Math.round(r.similarity * 100)}% match</small>
-                      </div>
-                      <small>{r.language}</small>
-                      <pre
-                        style={{
-                          margin: "6px 0",
-                          maxHeight: 70,
-                          overflow: "hidden",
-                          fontSize: 12,
-                          background: "#f4f4f4",
-                          padding: 6,
-                        }}
-                      >
-                        {r.code}
-                      </pre>
-                      <button onClick={() => insertSnippet(r.code)} style={{ width: "100%" }}>
-                        Insert at cursor
-                      </button>
+
+            <aside className="sidebar">
+              <div className="panel">
+                <h3 className="panel-title">Search snippets</h3>
+                <form onSubmit={runSearch} className="search-form">
+                  <input
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    placeholder="e.g. check user credentials"
+                    maxLength={300}
+                  />
+                  <button type="submit" className="primary" disabled={searching}>
+                    {searching ? "..." : "Search"}
+                  </button>
+                </form>
+                {results && results.length === 0 && (
+                  <p className="muted" style={{ marginTop: 10 }}>
+                    No snippets saved in this room yet.
+                  </p>
+                )}
+                {results?.map((r) => (
+                  <div key={r.id} className="result">
+                    <div className="result-head">
+                      <strong>{r.title}</strong>
+                      <span className="badge">{Math.round(r.similarity * 100)}% match</span>
                     </div>
-                  ))}
-                </div>
-              )}
-              <h3 style={{ margin: "0 0 8px" }}>Comments</h3>
-              <div style={{ flex: 1, overflowY: "auto", maxHeight: "50vh" }}>
-                {comments.length === 0 && <p>No comments yet.</p>}
-                {comments.map((c) => (
-                  <div
-                    key={c.id}
-                    onClick={() => jumpToLine(c.line)}
-                    style={{
-                      cursor: "pointer",
-                      border: "1px solid #ddd",
-                      borderRadius: 6,
-                      padding: 8,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <small>
-                      Line {c.line} · {c.author.split("@")[0]}
-                    </small>
-                    <div>{c.body}</div>
+                    <span className="muted">{r.language}</span>
+                    <pre className="code-preview">{r.code}</pre>
+                    <button onClick={() => insertSnippet(r.code)} style={{ width: "100%" }}>
+                      Insert at cursor
+                    </button>
                   </div>
                 ))}
               </div>
-              <form onSubmit={postComment} style={{ marginTop: 8 }}>
-                <small>Comment on line {cursorLine}</small>
-                <textarea
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  maxLength={500}
-                  rows={3}
-                  style={{ width: "100%", boxSizing: "border-box", padding: 6 }}
-                />
-                <button type="submit" style={{ width: "100%", padding: 8 }}>
-                  Add comment
-                </button>
-              </form>
-            </div>
+
+              <div className="panel">
+                <h3 className="panel-title">Comments</h3>
+                {comments.length === 0 && <p className="muted">No comments yet.</p>}
+                {comments.map((c) => (
+                  <div key={c.id} className="comment-item" onClick={() => jumpToLine(c.line)}>
+                    <div className="comment-meta">
+                      <span className="avatar">{c.author.charAt(0).toUpperCase()}</span>
+                      <span>
+                        {c.author.split("@")[0]} · line {c.line}
+                      </span>
+                    </div>
+                    <div>{c.body}</div>
+                  </div>
+                ))}
+                <form onSubmit={postComment} className="comment-form">
+                  <span className="muted">Comment on line {cursorLine}</span>
+                  <textarea
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    placeholder="Write a comment..."
+                  />
+                  <button type="submit" className="primary">
+                    Add comment
+                  </button>
+                </form>
+              </div>
+            </aside>
           </div>
         </>
       )}
