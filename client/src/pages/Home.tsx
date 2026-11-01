@@ -41,37 +41,36 @@ export default function Home() {
     }
   }
 
-  function logout() {
-    clearToken();
-    navigate("/login");
-  }
-
   return (
-    <div style={{ maxWidth: 600, margin: "60px auto", fontFamily: "sans-serif" }}>
-      <h2>Welcome, {email}</h2>
-      <button onClick={logout}>Log out</button>
+    <div className="container">
+      <h1 className="page-title">Welcome{email ? `, ${email.split("@")[0]}` : ""}</h1>
+      <p className="muted">Create a room and share it to code together live.</p>
 
-      <h3 style={{ marginTop: 30 }}>Create a room</h3>
-      <form onSubmit={createRoom}>
+      <form onSubmit={createRoom} className="create-form">
         <input
-          placeholder="Room name"
+          placeholder="New room name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{ padding: 8, marginRight: 8 }}
         />
-        <button type="submit" style={{ padding: 8 }}>Create</button>
+        <button type="submit" className="primary" disabled={!name.trim()}>
+          Create room
+        </button>
       </form>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      {error && <p className="error-text">{error}</p>}
 
-      <h3 style={{ marginTop: 30 }}>Your rooms</h3>
-      {rooms.length === 0 && <p>No rooms yet.</p>}
-      <ul>
-        {rooms.map((r) => (
-          <li key={r.id}>
-            <Link to={`/room/${r.id}`}>{r.name}</Link>
-          </li>
-        ))}
-      </ul>
+      <h3 className="section-title">Your rooms</h3>
+      {rooms.length === 0 ? (
+        <div className="empty">No rooms yet. Create your first one above.</div>
+      ) : (
+        <div className="rooms-grid">
+          {rooms.map((r) => (
+            <Link key={r.id} to={`/room/${r.id}`} className="room-card">
+              <strong>{r.name}</strong>
+              <span className="muted">Open room →</span>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

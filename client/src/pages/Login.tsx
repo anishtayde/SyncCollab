@@ -25,38 +25,58 @@ export default function Login() {
   }
 
   return (
-    <div style={{ maxWidth: 320, margin: "80px auto", fontFamily: "sans-serif" }}>
-      <h2>{mode === "login" ? "Log in" : "Create account"}</h2>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{ display: "block", width: "100%", marginBottom: 10, padding: 8 }}
-        />
-        <input
-          type="password"
-          placeholder="Password (min 8 chars)"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{ display: "block", width: "100%", marginBottom: 10, padding: 8 }}
-        />
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        <button type="submit" style={{ width: "100%", padding: 8 }}>
-          {mode === "login" ? "Log in" : "Sign up"}
-        </button>
-      </form>
-      <p>
-        {mode === "login" ? "No account? " : "Already have one? "}
-        <button
-          type="button"
-          onClick={() => setMode(mode === "login" ? "register" : "login")}
-          style={{ background: "none", border: "none", color: "blue", cursor: "pointer" }}
-        >
-          {mode === "login" ? "Sign up" : "Log in"}
-        </button>
-      </p>
+    <div className="auth-wrap">
+      <div className="auth-card">
+        <div className="brand">
+          <span className="brand-mark">SC</span>
+          SyncCollab
+        </div>
+        <h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2>
+        <p className="auth-sub">
+          {mode === "login"
+            ? "Log in to join your rooms."
+            : "Start coding together in real time."}
+        </p>
+        <form onSubmit={handleSubmit}>
+          <label className="field">
+            Email
+            <input
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            Password
+            <input
+              type="password"
+              placeholder="At least 8 characters"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          {error && <p className="error-text">{error}</p>}
+          <button type="submit" className="primary full">
+            {mode === "login" ? "Log in" : "Sign up"}
+          </button>
+        </form>
+        <p className="switch-line">
+          {mode === "login" ? "No account? " : "Already have one? "}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              setMode(mode === "login" ? "register" : "login");
+              setError("");
+            }}
+          >
+            {mode === "login" ? "Sign up" : "Log in"}
+          </button>
+        </p>
+      </div>
     </div>
   );
 }
